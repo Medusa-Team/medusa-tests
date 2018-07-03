@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
@@ -7,7 +8,7 @@
    program that wishes to access it. */
 #define KEY (1492)
 
-void main()
+int main()
 {
    int id;  /* Internal identifier of the semaphore. */
    struct sembuf operations[1]; /* An "array" of one operation to perform on the semaphore. */
@@ -18,7 +19,7 @@ void main()
    /* Semaphore does not exist. */
    if(id < 0)
    {
-      fprintf(stderr, "Program sema cannot find semaphore, exiting.\n");
+      perror("Program sema cannot find semaphore");
       exit(0);
    }
 
@@ -44,4 +45,6 @@ void main()
        printf("sema: V-operation did not succeed.\n");
 	    perror("REASON");
     }
+
+    return 0;
 }

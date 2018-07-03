@@ -1,16 +1,15 @@
-#include<string.h>
-#include<time.h>
-#include<sys/ipc.h>
-#include<sys/msg.h>
-#include<sys/wait.h>
-#include<sys/errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/wait.h>
+#include <sys/errno.h>
      
 extern int errno;       // error NO.
-#define MSGPERM 0666    // msg queue permission
 #define MSGTXTLEN 128   // msg text length
-
-int msgqid, rc;
-int done;
+#define MSGKEY	0x1234	// can be also IPC_PRIVATE
+#define MSGTYPE	1	// type of message
 
 struct msg_buf {
   long mtype;
@@ -19,45 +18,48 @@ struct msg_buf {
 
 int main(int argc,char **argv)
 {
+  int ret = 0;
+  int msgqid, rc;
+
   // create a message queue
-  msgqid = msgget(IPC_PRIVATE, MSGPERM|IPC_CREAT);
+  msgqid = msgget(MSGKEY, IPC_CREAT | 0666);
   if (msgqid < 0) {
-    perror(strerror(errno));
-    printf("failed to create message queue with msgqid = %d\n", msgqid);
+    perror("failed to create message queue");
     return 1;
   }
-  printf("message queue %d created\n",msgqid);
+  printf("message queue 0x%08x created\n",msgqid);
   
   // message to send
-  msg.mtype = 1; // set the type of message
-  sprintf (msg.mtext, "%s\n", "a"); 
+  msg.mtype = MSGTYPE;
+  sprintf (msg.mtext, "a"); 
 
   // send the message to queue
   // the last param can be: 0, IPC_NOWAIT, MSG_NOERROR, or IPC_NOWAIT|MSG_NOERROR.
-  rc = msgsnd(msgqid, &msg, 10, 0); 
+  rc = msgsnd(msgqid, (void *) &msg, 2, IPC_NOWAIT); 
   if (rc < 0) {
-    perror( strerror(errno) );
-    printf("msgsnd failed, rc = %d\n", rc);
-    return 1;
+    perror("msgsnd failed");
+    ret = 1;
+    goto err;
   }
+  printf("send msg: %s\n", msg.mtext);
 
   // read the message from queue
-  rc = msgrcv(msgqid, &msg, sizeof(msg.mtext), 0, 0); 
+  rc = msgrcv(msgqid, (void *) &msg, 2, MSGTYPE, MSG_NOERROR | IPC_NOWAIT); 
   if (rc < 0) {
-    perror( strerror(errno) );
-    printf("msgrcv failed, rc=%d\n", rc);
-    return 1;
+    perror("msgrcv failed");
+    ret = 1;
+    goto err;
   } 
   printf("received msg: %s\n", msg.mtext);
 
+err:
   // remove the queue
-  rc=msgctl(msgqid,IPC_RMID,NULL);
+  rc = msgctl(msgqid, IPC_RMID, NULL);
   if (rc < 0) {
-    perror( strerror(errno) );
-    printf("msgctl (return queue) failed, rc=%d\n", rc);
-    return 1;
+    perror("msgctl(IPC_RMID) failed");
+    ret = 1;
   }
-  printf("message queue %d is gone\n",msgqid);
+  printf("message queue 0x%08X is gone\n", msgqid);
 
-  return 0;
+  return ret;
 }
