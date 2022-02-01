@@ -21,10 +21,9 @@ struct msg_buf {
   char mtext[MSGTXTLEN];
 } msg;
 
-int main(int argc,char **argv)
+int main()
 {
-  int ret = 0;
-  int msgqid, rc;
+  int msgqid;
   char errbuf[1024];
   long msgtyp;
 
@@ -37,9 +36,9 @@ int main(int argc,char **argv)
   if (msgqid < 0) {
     sprintf(errbuf, "%06d: failed to create message queue", getpid());
     perror(errbuf);
-    //return 1;
   }
-  printf("message queue 0x%08x created\n",msgqid);
+  sprintf(errbuf, "message queue 0x%08x created\n", msgqid);
+  //printf(errbuf);
 
   // send messages to the queue
   msg.mtext[1] = 0;
@@ -48,37 +47,24 @@ int main(int argc,char **argv)
     msg.mtype = MSGGETTYPE();
     msg.mtext[0] = '0' + (char) msg.mtype;
     // the last param can be: 0, IPC_NOWAIT, MSG_NOERROR, or IPC_NOWAIT|MSG_NOERROR.
-    rc = msgsnd(msgqid, (void *) &msg, 2, IPC_NOWAIT);
-    if (rc < 0) {
-      //perror("msgsnd failed");
-      //ret = 1;
-      //goto err;
-    }
-    printf("%06d: send msg: %s\n", getpid(), msg.mtext);
+    msgsnd(msgqid, (void *) &msg, 2, IPC_NOWAIT);
+    sprintf(errbuf, "%06d: send msg: %s\n", getpid(), msg.mtext);
+    //printf(errbuf);
   }
 
   // read from the queue
   for (int i = 0; i < MSGRCVCNT; i++) {
     usleep((rand() % 10 + 1) * 100);
     msgtyp = MSGGETTYPE();
-    rc = msgrcv(msgqid, (void *) &msg, 2, msgtyp, MSG_NOERROR | IPC_NOWAIT);
-    if (rc < 0) {
-      //perror("msgrcv failed");
-      //ret = 1;
-      //goto err;
-    }
-    printf("%06d: received msg: %s\n", getpid(), msg.mtext);
+    msgrcv(msgqid, (void *) &msg, 2, msgtyp, MSG_NOERROR | IPC_NOWAIT);
+    sprintf(errbuf, "%06d: received msg: %s\n", getpid(), msg.mtext);
+    //printf(errbuf);
   }
 
-//err:
-  // remove the queue
   usleep((rand() % 10 + 1) * 100);
-  rc = msgctl(msgqid, IPC_RMID, NULL);
-  if (rc < 0) {
-    //perror("msgctl(IPC_RMID) failed");
-    ret = 1;
-  }
-  printf("%06d: message queue 0x%08X is gone\n", getpid(), msgqid);
+  msgctl(msgqid, IPC_RMID, NULL);
+  sprintf(errbuf, "%06d: message queue 0x%08X is gone\n", getpid(), msgqid);
+  //printf(errbuf);
 
-  return ret;
+  return 0;
 }
