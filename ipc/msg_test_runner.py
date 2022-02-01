@@ -9,8 +9,11 @@ def main():
     cwd = os.path.dirname(os.path.realpath(__file__))
 
     for i in range(subprocess_count):
-        proc = subprocess.Popen('./msg_test', cwd=cwd)
-        print(proc.pid)
+        try:
+            proc = subprocess.Popen('./msg_test', cwd=cwd)
+        except:
+            pass
+        #print(proc.pid)
 
 if __name__ == '__main__':
     main()
