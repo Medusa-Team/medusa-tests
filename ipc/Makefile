@@ -1,12 +1,12 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -D_GNU_SOURCE
-OBJ = msg_test.o
+PROGS = msg_test sem_test
 
-msg_test: $(OBJ)
-	$(CC) $(CFLAGS) $(OBJ) -o $@
+all: $(PROGS)
 
-msg_test.o: msg_test.c
+$(PROGS): %: %.c
+	$(CC) $(CFLAGS) -o $@ $<
 
 .PHONY: clean
 clean:
-	rm msg_test $(OBJ)
+	rm -f $(PROGS)
