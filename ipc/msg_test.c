@@ -69,13 +69,14 @@ int main()
       // lowest type less than or equal to the absolute value of `msgtyp` will be
       // read
       msgtyp *= (rand() % 2) * 2 - 1;
-      printf("msgtyp = %ld\n", msgtyp);
       if (msgtyp > 0 && rand() % 2)
 	// used with msgtyp greater than 0 to read the first message in the queue
 	// with message type that differs from `msgtyp`
 	msgflg |= MSG_EXCEPT;
     }
 
+    sprintf(errbuf, "msgtyp = %ld\n", msgtyp);
+    //printf(errbuf);
     msgrcv(msgqid, (void *) &msg, 2, msgtyp, msgflg);
     sprintf(errbuf, "%06d: received msg: %s\n", getpid(), msg.mtext);
     //printf(errbuf);
