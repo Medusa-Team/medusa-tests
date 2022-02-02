@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -D_GNU_SOURCE
 OBJ = msg_test.o
 
 msg_test: $(OBJ)

@@ -24,8 +24,9 @@ struct msg_buf {
 int main()
 {
   int msgqid;
-  char errbuf[1024];
+  char errbuf[2048];
   long msgtyp;
+  int msgflg;
 
   // initialise rnd generator
   srand(time(NULL));
@@ -55,8 +56,27 @@ int main()
   // read from the queue
   for (int i = 0; i < MSGRCVCNT; i++) {
     usleep((rand() % 10 + 1) * 100);
-    msgtyp = MSGGETTYPE();
-    msgrcv(msgqid, (void *) &msg, 2, msgtyp, MSG_NOERROR | IPC_NOWAIT);
+
+    // set random parameters of `msgtyp` and `msgflg`
+    msgflg = MSG_NOERROR | IPC_NOWAIT;
+    // if `msgtyp` is 0, then the first message in the queue is read
+    msgtyp = 0;
+    if (rand() % 2) {
+      // if `msgtyp` is greater than 0, then the first message in the queue of type
+      // `msgtyp` will be read
+      msgtyp = MSGGETTYPE();
+      // if `msgtyp` is less than 0, then the first message in the queue with the
+      // lowest type less than or equal to the absolute value of `msgtyp` will be
+      // read
+      msgtyp *= (rand() % 2) * 2 - 1;
+      printf("msgtyp = %ld\n", msgtyp);
+      if (msgtyp > 0 && rand() % 2)
+	// used with msgtyp greater than 0 to read the first message in the queue
+	// with message type that differs from `msgtyp`
+	msgflg |= MSG_EXCEPT;
+    }
+
+    msgrcv(msgqid, (void *) &msg, 2, msgtyp, msgflg);
     sprintf(errbuf, "%06d: received msg: %s\n", getpid(), msg.mtext);
     //printf(errbuf);
   }
