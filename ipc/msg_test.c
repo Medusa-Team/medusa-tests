@@ -13,7 +13,10 @@
 #include <sys/types.h>
 
 #define MSGTXTLEN 1024  // msg text length
-#define MSGKEY	0x1234	// can be also IPC_PRIVATE
+#define MSQKEY 0xbeef
+#define MSQS 5		// count of message queues
+#define MSQS_MAX 100
+#define MSQS_MIN 1
 #define WORKERS 1000	// count of msg senders and receivers together 
 #define WORKERS_MAX 10000
 #define WORKERS_MIN 10	// to avoid livelock (all workers of the same type)
@@ -163,10 +166,14 @@ void rcv_msg(int msq)
 void help(char *progname)
 {
   fprintf(stderr, "\n");
-  fprintf(stderr, "Usage: %s [--help | -h] [--silent | -s] [--verbose | -v] [--workers=N] [--timeout=T]\n\n", progname);
+  fprintf(stderr, "Usage: %s [--help | -h] [--silent | -s] [--verbose | -v]\n", progname);
+  fprintf(stderr, "\t\t[--workers=N] [--timeout=T] [--queues=Q]\n\n");
   fprintf(stderr, "Test message queue IPC subsystem.\n\n");
   fprintf(stderr, "Program tries to create N workers (through fork() system call);\n");
   fprintf(stderr, "each worker (randomly choosen) is one of msg sender or receiver.\n");
+  fprintf(stderr, "For purpose of testing there are used Q message queues and the\n");
+  fprintf(stderr, "test takes T seconds. Each worker is connected with one message\n");
+  fprintf(stderr, "queue randomly choosen at the moment of creation of the worker.\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "Options\n");
   fprintf(stderr, "  --help\tThis message ;)\n");
@@ -181,16 +188,19 @@ void help(char *progname)
   fprintf(stderr, "\t\tconsists from two parts: the time of workers cre-\n");
   fprintf(stderr, "\t\tation and the run of them.\n");
   fprintf(stderr, "\t\tT should be an integer in <%d; %d>.\n", TIMEOUT_MIN, TIMEOUT_MAX);
-  fprintf(stderr, "\n");
+  fprintf(stderr, "  --queues=Q\tThe count of message queues. The default value is\n");
+  fprintf(stderr, "\t\tset to %d.\n", MSQS);
+  fprintf(stderr, "\t\tQ should be an integer in <%d; %d> and 10 * Q <= N.\n", MSQS_MIN, MSQS_MAX);
   fprintf(stderr, "\n");
 }
 
 int main(int argc, char *argv[])
 {
-  int workers = WORKERS, timeout = TIMEOUT;
-  int msq, i, c, worker_type;
+  int workers = WORKERS, timeout = TIMEOUT, msqs = MSQS;
+  int i, c, worker_type;
   int op[2]; // op[0] -- operation snd, op[1] -- operation rcv
   pid_t pids[WORKERS_MAX], pid;
+  int queues[MSQS_MAX];
   char buf[1024];
   sigset_t set;
   void (*operation)(int);
@@ -200,6 +210,7 @@ int main(int argc, char *argv[])
     {"verbose", no_argument, 0, 'v'},
     {"workers", required_argument, 0, 'w'},
     {"timeout", required_argument, 0, 't'},
+    {"queues", required_argument, 0, 'q'},
     {0, 0, 0, 0},
   };
 
@@ -237,6 +248,14 @@ int main(int argc, char *argv[])
         return -1;
       }
       break;
+    case 'q':
+      memset(buf, '\0', sizeof(buf));
+      if (sscanf(optarg, "%d%s", &msqs, buf) != 1 || strlen(buf) || msqs < MSQS_MIN || msqs > MSQS_MAX) {
+        fprintf(stderr, "Error: invalid argument of the option '--queues'.\n");
+        help(argv[0]);
+        return -1;
+      }
+      break;
     case 's':
       silent = 1;
       break;
@@ -247,14 +266,20 @@ int main(int argc, char *argv[])
     }
   }
 
+  // sanity checks
   if (silent && verbose) {
     fprintf(stderr, "Error: cannot be set both options '--silent' and '--verbose' together!\n");
     help(argv[0]);
     return -1;
   }
+  if (10 * msqs > workers) {
+    fprintf(stderr, "Error: invalid number of message queues or workers, 10 * Q is greather than N!\n");
+    help(argv[0]);
+    return -1;
+  }
 
   // prepare process signal mask to handle SIGUSR1
-  // all children inherite blocked SIGUSR1
+  // all children will inherite blocked SIGUSR1
   sigemptyset(&set);
   sigaddset(&set, SIGUSR1);
   if (sigprocmask(SIG_BLOCK, &set, 0) < 0) {
@@ -263,15 +288,23 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  // initialise rnd generator, variables and message queue
+  // initialise rnd generator, variables and message queue(s)
   srand(time(NULL));
   memset(pids, '\0', sizeof(pids));
-  if ((msq = open_msq(MSGKEY)) < 0)
-    return -1;
+  memset(queues, (char) -1, sizeof(queues));
+  for (i = 0; i < msqs; i++) {
+    if ((queues[i] = open_msq(MSQKEY + i)) < 0) {
+      while (i > 0) {
+        close_msq(queues[i-1]);
+	i--;
+      }
+      return -1;
+    }
+  }
 
   // create WORKERS tasks
   if (!silent)
-    fprintf(stderr, "wait a moment... I'm trying to generate %d message senders and receivers... ", workers);
+    fprintf(stderr, "wait a moment... I'm trying to randomly generate %d message senders and receivers for %d different message queues... ", workers, msqs);
   op[0] = op[1] = 0;
   for (i = 0; i < workers; i++) {
     worker_type = rand() % 2;
@@ -283,7 +316,7 @@ int main(int argc, char *argv[])
     if (pids[i] == 0) {
       // random choice rcv_msg/snd_msg
       operation = worker_type ? rcv_msg : snd_msg;
-      operation(msq);
+      operation(queues[rand() % msqs]);
       return 0;
     }
    
@@ -309,8 +342,9 @@ int main(int argc, char *argv[])
     return -1;
   }
   sleep(timeout);
-  // destroy message queue to finish workers
-  close_msq(msq);
+  // destroy message queue(s) to finish workers
+  for (i = 0; i < msqs; i++)
+    close_msq(queues[i]);
   sleep(1);
 
   // clean up
