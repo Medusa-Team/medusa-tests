@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
       break;
     }
   }
-  fprintf(stderr, "done\ntest continues for another %d secs with %d childs alive: %d senders, %d receivers\n",
+  fprintf(stderr, "done\ntest continues for another %d secs with %d children alive: %d senders, %d receivers\n",
           timeout, workers, op[0], op[1]);
 
   // let workers to do something interesting...
@@ -251,21 +251,21 @@ int main(int argc, char *argv[])
 
   // clean up
   while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
-    for (i = 0; i < WORKERS; i++) {
+    for (i = 0; i < WORKERS_MAX; i++) {
       if (pids[i] == pid) {
         pids[i] = 0;
 	workers--;
 	break;
       }
     }
-    if (i == WORKERS)
+    if (i == WORKERS_MAX)
       fprintf(stderr, "error: pid %d is not mY child!\n", pid);
   }
   if (workers)
-   fprintf(stderr, "not finished %d from %d childs yet, I'll kill them ;)\n", workers, WORKERS);
+   fprintf(stderr, "not finished %d from %d children yet, I'll kill them ;)\n", workers, WORKERS);
 
   // kill not finished workers yet
-  for (i = 0; i < WORKERS; i++) {
+  for (i = 0; i < WORKERS_MAX; i++) {
     if (pids[i] > 0) {
       kill(pids[i], SIGKILL);
       if (waitpid(pids[i], NULL, 0) != pids[i])
