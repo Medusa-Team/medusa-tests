@@ -16,7 +16,7 @@
 #define MSGKEY	0x1234	// can be also IPC_PRIVATE
 #define WORKERS 1000	// count of msg senders and receivers together 
 #define WORKERS_MAX 10000
-#define WORKERS_MIN 1
+#define WORKERS_MIN 10	// to avoid livelock (all workers of the same type)
 #define TIMEOUT 10	// runtime of the test in secs
 #define TIMEOUT_MAX 300
 #define TIMEOUT_MIN 2
@@ -25,19 +25,22 @@
 
 extern int errno;
 int silent;
+int verbose;
 
 struct msg {
   long mtype;
   char mtext[MSGTXTLEN];
 };
 
-void wait_signal(int sig)
+void wait_sigusr1()
 {
   sigset_t set;
+  int sig;
 
+  // SIGUSR1 is blocked (inherited) from the parent!
   sigemptyset(&set);
-  sigaddset(&set, sig);
-  if (!sigwait(&set, &sig)) {
+  sigaddset(&set, SIGUSR1);
+  if (sigwait(&set, &sig)) {
     if (!silent)
       fprintf(stderr, "Error: cannot set a SIGUSR1 handler\n");
     exit(-1);
@@ -45,7 +48,7 @@ void wait_signal(int sig)
 }
 
 // create or open a message queue
-int open_msq(unsigned int key, int print)
+int open_msq(unsigned int key)
 {
   int msq;
   char str[2048];
@@ -58,7 +61,7 @@ int open_msq(unsigned int key, int print)
       perror(str);
     return -1;
   }
-  if (!silent && print) {
+  if (verbose) {
     sprintf(str, "message queue 0x%08x created\n", msq);
     fprintf(stderr, str);
   }
@@ -66,26 +69,26 @@ int open_msq(unsigned int key, int print)
 }
 
 // remove a message queue
-void close_msq(int msq, int print)
+void close_msq(int msq)
 {
   char str[2048];
 
   usleep((rand() % 10 + 1) * 100);
   msgctl(msq, IPC_RMID, NULL);
-  if (!silent && print) {
+  if (verbose) {
     sprintf(str, "%06d: message queue 0x%08X is gone\n", getpid(), msq);
     fprintf(stderr, str);
   }
 }
 
 // send messages to the queue
-void snd_msg(int msq, int print)
+void snd_msg(int msq)
 {
   char str[2048];
   struct msg msg;
 
   // wait for a signal to start
-  wait_signal(SIGUSR1);
+  wait_sigusr1();
 
   msg.mtext[1] = 0;
   while (1) {
@@ -100,15 +103,15 @@ void snd_msg(int msq, int print)
       if (errno != EACCES && errno != EAGAIN)
         break;
     }
-    if (!silent && print) {
-      sprintf(str, "%06d: send msg: %s\n", getpid(), msg.mtext);
+    if (verbose) {
+      sprintf(str, "%06d: send msg '%s'\n", getpid(), msg.mtext);
       fprintf(stderr, str);
     }
   }
 }
 
 // read from the queue
-void rcv_msg(int msq, int print)
+void rcv_msg(int msq)
 {
   long msgtyp;
   int msgflg;
@@ -116,7 +119,7 @@ void rcv_msg(int msq, int print)
   char str[2048];
 
   // wait for a signal to start
-  wait_signal(SIGUSR1);
+  wait_sigusr1();
 
   while (1) {
     usleep((rand() % 10 + 1) * 100);
@@ -140,17 +143,18 @@ void rcv_msg(int msq, int print)
 	msgflg |= MSG_EXCEPT;
     }
 
-    if (!silent && print) {
-      sprintf(str, "msgtyp = %ld\n", msgtyp);
-      fprintf(stderr, str);
-    }
     if (msgrcv(msq, (void *) &msg, 2, msgtyp, msgflg) < 0) {
       // terminate on all errors except EACCESS and EAGAIN
-      if (errno != EACCES && errno != EAGAIN)
+      if (errno != EACCES && errno != EAGAIN) {
+        if (verbose) {
+          sprintf(str, "%06d: received msg of msgtype %ld failed: %s\n", getpid(), msgtyp, strerror(errno));
+          fprintf(stderr, str);
+	}
         break;
+      }
     }
-    if (!silent && print) {
-      sprintf(str, "%06d: received msg: %s\n", getpid(), msg.mtext);
+    if (verbose) {
+      sprintf(str, "%06d: received msg '%s', msgtype %ld\n", getpid(), msg.mtext, msgtyp);
       fprintf(stderr, str);
     }
   }
@@ -159,7 +163,7 @@ void rcv_msg(int msq, int print)
 void help(char *progname)
 {
   fprintf(stderr, "\n");
-  fprintf(stderr, "Usage: %s [--help | -h] [--silent | -s] [--workers=N] [--timeout=T]\n\n", progname);
+  fprintf(stderr, "Usage: %s [--help | -h] [--silent | -s] [--verbose | -v] [--workers=N] [--timeout=T]\n\n", progname);
   fprintf(stderr, "Test message queue IPC subsystem.\n\n");
   fprintf(stderr, "Program tries to create N workers (through fork() system call);\n");
   fprintf(stderr, "each worker (randomly choosen) is one of msg sender or receiver.\n");
@@ -167,6 +171,7 @@ void help(char *progname)
   fprintf(stderr, "Options\n");
   fprintf(stderr, "  --help\tThis message ;)\n");
   fprintf(stderr, "  --silent\tSuppress all messages (include error messages).\n");
+  fprintf(stderr, "  --verbose\tPrint all messages about operations.\n");
   fprintf(stderr, "  --workers=N\tThe count of workers. The default number of wor-\n");
   fprintf(stderr, "\t\tkers is %d.\n", WORKERS);
   fprintf(stderr, "\t\tN should be an integer in <%d; %d>.\n", WORKERS_MIN, WORKERS_MAX);
@@ -187,17 +192,19 @@ int main(int argc, char *argv[])
   int op[2]; // op[0] -- operation snd, op[1] -- operation rcv
   pid_t pids[WORKERS_MAX], pid;
   char buf[1024];
-  void (*operation)(int, int);
+  sigset_t set;
+  void (*operation)(int);
   static struct option long_options[] = {
     {"help", no_argument, 0, 'h'},
     {"silent", no_argument, 0, 's'},
+    {"verbose", no_argument, 0, 'v'},
     {"workers", required_argument, 0, 'w'},
     {"timeout", required_argument, 0, 't'},
     {0, 0, 0, 0},
   };
 
   silent = 0;
-  while ((c = getopt_long(argc, argv, ":hs", long_options, 0)) != -1) {
+  while ((c = getopt_long(argc, argv, ":hsv", long_options, 0)) != -1) {
     switch (c) {
     case 'h':
       help(argv[0]);
@@ -233,13 +240,33 @@ int main(int argc, char *argv[])
     case 's':
       silent = 1;
       break;
+    case 'v':
+      verbose = 1;
+      fprintf(stderr, "Verbose mode turned on.\n");
+      break;
     }
+  }
+
+  if (silent && verbose) {
+    fprintf(stderr, "Error: cannot be set both options '--silent' and '--verbose' together!\n");
+    help(argv[0]);
+    return -1;
+  }
+
+  // prepare process signal mask to handle SIGUSR1
+  // all children inherite blocked SIGUSR1
+  sigemptyset(&set);
+  sigaddset(&set, SIGUSR1);
+  if (sigprocmask(SIG_BLOCK, &set, 0) < 0) {
+    if (!silent)
+      perror("sigprocmask block SIGUSR1 failed");
+    return -1;
   }
 
   // initialise rnd generator, variables and message queue
   srand(time(NULL));
   memset(pids, '\0', sizeof(pids));
-  if ((msq = open_msq(MSGKEY, 0)) < 0)
+  if ((msq = open_msq(MSGKEY)) < 0)
     return -1;
 
   // create WORKERS tasks
@@ -256,7 +283,7 @@ int main(int argc, char *argv[])
     if (pids[i] == 0) {
       // random choice rcv_msg/snd_msg
       operation = worker_type ? rcv_msg : snd_msg;
-      operation(msq, 0);
+      operation(msq);
       return 0;
     }
    
@@ -276,10 +303,14 @@ int main(int argc, char *argv[])
             timeout, workers, op[0], op[1]);
 
   // let workers to do something interesting... start all workers by sending a SIGUSR1 signal
-  kill(-pids[0], SIGUSR1);
+  if (kill(-pids[0], SIGUSR1) < 0) {
+    if (!silent)
+      perror("deliver SIGUSR1 to workers failed");
+    return -1;
+  }
   sleep(timeout);
   // destroy message queue to finish workers
-  close_msq(msq, 0);
+  close_msq(msq);
   sleep(1);
 
   // clean up
