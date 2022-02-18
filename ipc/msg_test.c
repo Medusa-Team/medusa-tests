@@ -30,6 +30,18 @@ struct msg {
   char mtext[MSGTXTLEN];
 };
 
+void wait_signal(int sig)
+{
+  sigset_t set;
+
+  sigemptyset(&set);
+  sigaddset(&set, sig);
+  if (!sigwait(&set, &sig)) {
+    fprintf(stderr, "Error: cannot set a SIGUSR1 handler\n");
+    exit(-1);
+  }
+}
+
 // create or open a message queue
 int open_msq(unsigned int key, int print)
 {
@@ -69,6 +81,9 @@ void snd_msg(int msq, int print)
   char str[2048];
   struct msg msg;
 
+  // wait for a signal to start
+  wait_signal(SIGUSR1);
+
   msg.mtext[1] = 0;
   while (1) {
     usleep((rand() % 10 + 1) * 100);
@@ -96,6 +111,9 @@ void rcv_msg(int msq, int print)
   int msgflg;
   struct msg msg;
   char str[2048];
+
+  // wait for a signal to start
+  wait_signal(SIGUSR1);
 
   while (1) {
     usleep((rand() % 10 + 1) * 100);
@@ -239,11 +257,15 @@ int main(int argc, char *argv[])
       op[worker_type]--;
       break;
     }
+
+    // put all children in process group of eldest child
+    setpgid(pids[i], pids[0]);
   }
   fprintf(stderr, "done\ntest continues for another %d secs with %d children alive: %d senders, %d receivers\n",
           timeout, workers, op[0], op[1]);
 
-  // let workers to do something interesting...
+  // let workers to do something interesting... start all workers by sending a SIGUSR1 signal
+  kill(-pids[0], SIGUSR1);
   sleep(timeout);
   // destroy message queue to finish workers
   close_msq(msq, 0);
