@@ -24,6 +24,7 @@
 #define MSGGETTYPE()	((rand() % 5) + 1)
 
 extern int errno;
+int silent;
 
 struct msg {
   long mtype;
@@ -37,7 +38,8 @@ void wait_signal(int sig)
   sigemptyset(&set);
   sigaddset(&set, sig);
   if (!sigwait(&set, &sig)) {
-    fprintf(stderr, "Error: cannot set a SIGUSR1 handler\n");
+    if (!silent)
+      fprintf(stderr, "Error: cannot set a SIGUSR1 handler\n");
     exit(-1);
   }
 }
@@ -52,10 +54,11 @@ int open_msq(unsigned int key, int print)
   msq = msgget(key, IPC_CREAT | 0666);
   if (msq < 0) {
     sprintf(str, "%06d: failed to create message queue", getpid());
-    perror(str);
+    if (!silent)
+      perror(str);
     return -1;
   }
-  if (print) {
+  if (!silent && print) {
     sprintf(str, "message queue 0x%08x created\n", msq);
     fprintf(stderr, str);
   }
@@ -69,7 +72,7 @@ void close_msq(int msq, int print)
 
   usleep((rand() % 10 + 1) * 100);
   msgctl(msq, IPC_RMID, NULL);
-  if (print) {
+  if (!silent && print) {
     sprintf(str, "%06d: message queue 0x%08X is gone\n", getpid(), msq);
     fprintf(stderr, str);
   }
@@ -97,7 +100,7 @@ void snd_msg(int msq, int print)
       if (errno != EACCES && errno != EAGAIN)
         break;
     }
-    if (print) {
+    if (!silent && print) {
       sprintf(str, "%06d: send msg: %s\n", getpid(), msg.mtext);
       fprintf(stderr, str);
     }
@@ -137,7 +140,7 @@ void rcv_msg(int msq, int print)
 	msgflg |= MSG_EXCEPT;
     }
 
-    if (print) {
+    if (!silent && print) {
       sprintf(str, "msgtyp = %ld\n", msgtyp);
       fprintf(stderr, str);
     }
@@ -146,7 +149,7 @@ void rcv_msg(int msq, int print)
       if (errno != EACCES && errno != EAGAIN)
         break;
     }
-    if (print) {
+    if (!silent && print) {
       sprintf(str, "%06d: received msg: %s\n", getpid(), msg.mtext);
       fprintf(stderr, str);
     }
@@ -156,13 +159,14 @@ void rcv_msg(int msq, int print)
 void help(char *progname)
 {
   fprintf(stderr, "\n");
-  fprintf(stderr, "Usage: %s [--help | -h] [--workers=N] [--timeout=T]\n\n", progname);
+  fprintf(stderr, "Usage: %s [--help | -h] [--silent | -s] [--workers=N] [--timeout=T]\n\n", progname);
   fprintf(stderr, "Test message queue IPC subsystem.\n\n");
   fprintf(stderr, "Program tries to create N workers (through fork() system call);\n");
   fprintf(stderr, "each worker (randomly choosen) is one of msg sender or receiver.\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "Options\n");
   fprintf(stderr, "  --help\tThis message ;)\n");
+  fprintf(stderr, "  --silent\tSuppress all messages (include error messages).\n");
   fprintf(stderr, "  --workers=N\tThe count of workers. The default number of wor-\n");
   fprintf(stderr, "\t\tkers is %d.\n", WORKERS);
   fprintf(stderr, "\t\tN should be an integer in <%d; %d>.\n", WORKERS_MIN, WORKERS_MAX);
@@ -186,12 +190,14 @@ int main(int argc, char *argv[])
   void (*operation)(int, int);
   static struct option long_options[] = {
     {"help", no_argument, 0, 'h'},
+    {"silent", no_argument, 0, 's'},
     {"workers", required_argument, 0, 'w'},
     {"timeout", required_argument, 0, 't'},
     {0, 0, 0, 0},
   };
 
-  while ((c = getopt_long(argc, argv, ":h", long_options, 0)) != -1) {
+  silent = 0;
+  while ((c = getopt_long(argc, argv, ":hs", long_options, 0)) != -1) {
     switch (c) {
     case 'h':
       help(argv[0]);
@@ -224,6 +230,9 @@ int main(int argc, char *argv[])
         return -1;
       }
       break;
+    case 's':
+      silent = 1;
+      break;
     }
   }
 
@@ -234,7 +243,8 @@ int main(int argc, char *argv[])
     return -1;
 
   // create WORKERS tasks
-  fprintf(stderr, "wait a moment... I'm trying to generate %d message senders and receivers... ", workers);
+  if (!silent)
+    fprintf(stderr, "wait a moment... I'm trying to generate %d message senders and receivers... ", workers);
   op[0] = op[1] = 0;
   for (i = 0; i < workers; i++) {
     worker_type = rand() % 2;
@@ -261,8 +271,9 @@ int main(int argc, char *argv[])
     // put all children in process group of eldest child
     setpgid(pids[i], pids[0]);
   }
-  fprintf(stderr, "done\ntest continues for another %d secs with %d children alive: %d senders, %d receivers\n",
-          timeout, workers, op[0], op[1]);
+  if (!silent)
+    fprintf(stderr, "done\ntest continues for another %d secs with %d children alive: %d senders, %d receivers\n",
+            timeout, workers, op[0], op[1]);
 
   // let workers to do something interesting... start all workers by sending a SIGUSR1 signal
   kill(-pids[0], SIGUSR1);
@@ -280,17 +291,17 @@ int main(int argc, char *argv[])
 	break;
       }
     }
-    if (i == WORKERS_MAX)
+    if (!silent && i == WORKERS_MAX)
       fprintf(stderr, "error: pid %d is not mY child!\n", pid);
   }
-  if (workers)
+  if (!silent && workers)
    fprintf(stderr, "not finished %d from %d children yet, I'll kill them ;)\n", workers, WORKERS);
 
   // kill not finished workers yet
   for (i = 0; i < WORKERS_MAX; i++) {
     if (pids[i] > 0) {
       kill(pids[i], SIGKILL);
-      if (waitpid(pids[i], NULL, 0) != pids[i])
+      if (!silent && waitpid(pids[i], NULL, 0) != pids[i])
         fprintf(stderr, "error: waiting to child %d kill failed\n", pids[i]);
     }
   }
