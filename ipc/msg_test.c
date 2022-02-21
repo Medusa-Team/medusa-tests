@@ -89,6 +89,7 @@ void snd_msg(int msq)
 {
   char str[2048];
   struct msg msg;
+  int msgflg;
 
   // wait for a signal to start
   wait_sigusr1();
@@ -99,9 +100,9 @@ void snd_msg(int msq)
 
     msg.mtype = MSGGETTYPE();
     msg.mtext[0] = '0' + (char) msg.mtype;
+    msgflg = rand() % 2 ? 0 : IPC_NOWAIT;
     // the last param can be: 0, IPC_NOWAIT, MSG_NOERROR, or IPC_NOWAIT|MSG_NOERROR.
-    //msgsnd(msq, (void *) &msg, 2, IPC_NOWAIT);
-    if (msgsnd(msq, (void *) &msg, 2, 0) < 0) {
+    if (msgsnd(msq, (void *) &msg, 2, msgflg) < 0) {
       // terminate on all errors except EACCESS and EAGAIN
       if (errno != EACCES && errno != EAGAIN)
         break;
@@ -128,8 +129,8 @@ void rcv_msg(int msq)
     usleep((rand() % 10 + 1) * 100);
 
     // set random parameters of `msgtyp` and `msgflg`
-    //msgflg = MSG_NOERROR | IPC_NOWAIT;
-    msgflg = MSG_NOERROR;
+    msgflg = rand() % 2 ? 0 : IPC_NOWAIT;
+    msgflg |= MSG_NOERROR;
     // if `msgtyp` is 0, then the first message in the queue is read
     msgtyp = 0;
     if (rand() % 2) {
