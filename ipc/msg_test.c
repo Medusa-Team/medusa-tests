@@ -332,6 +332,14 @@ int main(int argc, char *argv[])
     // put all children in process group of eldest child
     setpgid(pids[i], pids[0]);
   }
+  // sanity check again for the number of message queues against successfully created workers
+  if (10 * msqs > workers) {
+    fprintf(stderr, "\nError: invalid number of queues (%d) or created workers (%d), 10 * Q is greather than N!\n",
+            msqs, workers);
+    help(argv[0]);
+    kill(-pids[0], SIGKILL);
+    return -1;
+  }
   if (!silent)
     fprintf(stderr, "done\ntest continues for another %d secs with %d children alive: %d senders, %d receivers\n",
             timeout, workers, op[0], op[1]);
