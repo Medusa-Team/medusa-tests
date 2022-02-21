@@ -170,14 +170,14 @@ void help(char *progname)
   fprintf(stderr, "\t\t[--workers=N] [--timeout=T] [--queues=Q]\n\n");
   fprintf(stderr, "Test message queue IPC subsystem.\n\n");
   fprintf(stderr, "Program tries to create N workers (through fork() system call);\n");
-  fprintf(stderr, "each worker (randomly choosen) is one of msg sender or receiver.\n");
-  fprintf(stderr, "For purpose of testing there are used Q message queues and the\n");
+  fprintf(stderr, "each worker (randomly choosen) is either msg sender or receiver.\n");
+  fprintf(stderr, "For purpose of testing there are Q message queues used and the\n");
   fprintf(stderr, "test takes T seconds. Each worker is connected with one message\n");
   fprintf(stderr, "queue randomly choosen at the moment of creation of the worker.\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "Options\n");
   fprintf(stderr, "  --help\tThis message ;)\n");
-  fprintf(stderr, "  --silent\tSuppress all messages (include error messages).\n");
+  fprintf(stderr, "  --silent\tSuppress all messages (including error messages).\n");
   fprintf(stderr, "  --verbose\tPrint all messages about operations.\n");
   fprintf(stderr, "  --workers=N\tThe count of workers. The default number of wor-\n");
   fprintf(stderr, "\t\tkers is %d.\n", WORKERS);
@@ -185,8 +185,8 @@ void help(char *progname)
   fprintf(stderr, "  --timeout=T\tThe duration of the test. The default timeout is\n");
   fprintf(stderr, "\t\tset to %d secs. The timeout starts *after* crea-\n", TIMEOUT);
   fprintf(stderr, "\t\ttion of all workers. So the duration of the test\n");
-  fprintf(stderr, "\t\tconsists from two parts: the time of workers cre-\n");
-  fprintf(stderr, "\t\tation and the run of them.\n");
+  fprintf(stderr, "\t\tconsists of two parts: the time of workers cre-\n");
+  fprintf(stderr, "\t\tation and the execution of them.\n");
   fprintf(stderr, "\t\tT should be an integer in <%d; %d>.\n", TIMEOUT_MIN, TIMEOUT_MAX);
   fprintf(stderr, "  --queues=Q\tThe count of message queues. The default value is\n");
   fprintf(stderr, "\t\tset to %d.\n", MSQS);
@@ -268,7 +268,7 @@ int main(int argc, char *argv[])
 
   // sanity checks
   if (silent && verbose) {
-    fprintf(stderr, "Error: cannot be set both options '--silent' and '--verbose' together!\n");
+    fprintf(stderr, "Error: cannot set both options '--silent' and '--verbose' together!\n");
     help(argv[0]);
     return -1;
   }
