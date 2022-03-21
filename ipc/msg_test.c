@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
       operation(queues[rand() % msqs]);
       return 0;
     }
-   
+
     // if we cannot produce another child, continue with those created yet
     if (pids[i] == -1) {
       workers = i;
@@ -369,7 +369,7 @@ int main(int argc, char *argv[])
       fprintf(stderr, "error: pid %d is not mY child!\n", pid);
   }
   if (!silent && workers)
-   fprintf(stderr, "not finished %d from %d children yet, I'll kill them ;)\n", workers, WORKERS);
+   fprintf(stderr, "not finished %d children yet, I'll kill them ;)\n", workers);
 
   // kill not finished workers yet
   for (i = 0; i < WORKERS_MAX; i++) {
