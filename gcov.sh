@@ -3,6 +3,7 @@
 #
 # Copyright (C) 2023 by Matus Jokay
 
+LOGNAME=logname
 LCOV=lcov
 GENHTML=genhtml
 GCDA=/sys/kernel/debug/gcov
@@ -14,15 +15,16 @@ DEP_MET=1
 # auxiliary functions
 
 check() {
-  declare -n RET=$1
-
-  PROG=`which "$1"`
-  if [ x"$PROG" == x ]; then
-    echo "Please install \`$1'."
+  PROG=`echo "${!1}"`
+  PROG_PATH=`which "$PROG"`
+  if [ x"$PROG_PATH" == x ]; then
+    if [ x"$2" == x ]; then
+      echo "Please install \`$PROG'."
+    fi
     DEP_MET=0
   fi
 
-  RET=$PROG
+  eval ${1}=$PROG_PATH
 }
 
 usage() {
@@ -32,8 +34,9 @@ usage() {
 
 # sanity checks
 
-check $LCOV 
-check $GENHTML
+check LOGNAME
+check LCOV
+check GENHTML "do_not_print_error_if_not_found"
 
 if [ $DEP_MET -eq 0 ]; then
   exit 1
@@ -72,9 +75,10 @@ find $GCDA -path '*/medusa/*.gcno' -exec sh -c 'cp -d $0 '$OUTDIR'/${0#*/medusa/
 TEMPDIR=`mktemp -d`
 $LCOV -c -d ${OUTDIR} -o ${OUTDIR}/lcov.info 1>/dev/null 2>&1
 $GENHTML -o ${TEMPDIR} ${OUTDIR}/lcov.info 1>/dev/null 2>&1
-rm -rf ${OUTDIR}
-mv ${TEMPDIR} ${OUTDIR}
-chown medusa:medusa ${OUTDIR}  -R
+rm -rf ${OUTDIR} 1>/dev/null 2>&1
+mv ${TEMPDIR} ${OUTDIR} 1>/dev/null 2>&1
+LOGNAME=`$LOGNAME`
+chown $LOGNAME:`id -Gn $LOGNAME | cut -f1 -d' '` ${OUTDIR} -R 1>/dev/null 2>&1
 
 # final info
 echo "HTML output is in \`${OUTDIR}' directory. Open \`${OUTDIR}/index.html' with a browser and enjoY!"
