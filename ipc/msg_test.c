@@ -17,7 +17,7 @@
 #define MSQS 5		// count of message queues
 #define MSQS_MAX 100
 #define MSQS_MIN 1
-#define WORKERS 1000	// count of msg senders and receivers together 
+#define WORKERS 1000	// count of msg senders and receivers together
 #define WORKERS_MAX 10000
 #define WORKERS_MIN 10	// to avoid livelock (all workers of the same type)
 #define TIMEOUT 10	// runtime of the test in secs
@@ -48,6 +48,28 @@ void wait_sigusr1()
       fprintf(stderr, "Error: cannot set a SIGUSR1 handler\n");
     exit(-1);
   }
+}
+
+// get message queue limits and parameters and system resources consumed by message queues
+int ipc_info_msq(void)
+{
+  /* Information  about system-wide message queue limits and parameters. */
+  struct msginfo msginfo;
+  /*
+   * The index of the highest used entry in the kernel's internal array recording
+   * information about all message queues.
+   */
+  int lue;
+
+  lue = msgctl(0, IPC_INFO, (struct msqid_ds *)&msginfo);
+  if (lue < 0)
+    perror("msgctl(IPC_INFO)");
+
+  lue = msgctl(0, MSG_INFO, (struct msqid_ds *)&msginfo);
+  if (lue < 0)
+    perror("msgctl(MSG_INFO)");
+
+  return lue;
 }
 
 // create or open a message queue
@@ -278,6 +300,10 @@ int main(int argc, char *argv[])
     help(argv[0]);
     return -1;
   }
+
+  // probe msgctl(IPC_INFO) syscall
+  if (ipc_info_msq() < 0)
+    return -1;
 
   // prepare process signal mask to handle SIGUSR1
   // all children will inherite blocked SIGUSR1
